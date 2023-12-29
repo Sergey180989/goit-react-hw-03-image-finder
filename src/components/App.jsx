@@ -14,7 +14,8 @@ class App extends Component {
   state = {
     imgName: '',
     page: 1,
-    imgArray: null,
+    imgArray: [],
+    uniqueIds: new Set(),
     largeImg: null,
     status: 'idle',
     error: null,
@@ -22,18 +23,22 @@ class App extends Component {
   };
 
   fetchData = async () => {
-    const { imgName, page } = this.state;
+    const { imgName, page, uniqueIds } = this.state;
     try {
       const { data } = await axios.get(`${API_GET}q=${imgName}&key=${API_KEY}&page=${page}&image_type=photo&orientation=horizontal&per_page=12`);
+      
       if (data.hits.length === 0) {
         this.setState({
           error: `Images with name ${imgName} not found`,
           status: 'resolveWithoutButton',
         });
       } else {
+        const uniqueImages = data.hits.filter(image => !uniqueIds.has(image.id)).map(({ id, webformatURL, largeImageURL }) => ({ id, webformatURL, largeImageURL }));
+        
         this.setState(prev => ({
-          imgArray: [...(prev.imgArray || []), ...data.hits.map(({ id, webformatURL, largeImageURL }) => ({ id, webformatURL, largeImageURL }))],
-          status: 'resolved',
+          imgArray: [...prev.imgArray, ...uniqueImages],
+          uniqueIds: new Set([...prev.uniqueIds, ...uniqueImages.map(img => img.id)]),
+          status: uniqueImages.length === 0 ? 'resolveWithoutButton' : 'resolved',
         }));
       }
     } catch (err) {
@@ -42,27 +47,24 @@ class App extends Component {
   };
 
   componentDidUpdate(prevProps, prevState) {
-    if (prevState.imgName !== this.state.imgName) {
-      this.setState({ status: 'pending', imgArray: [] }, () => { 
-        this.fetchData().then(() => {
-          this.setState(prev => ({ page: prev.page + 1 })); 
-        });
+    if (prevState.imgName !== this.state.imgName || prevState.page !== this.state.page) {
+      this.setState({ status: 'pending' }, () => {
+        this.fetchData();
       });
     }
-}
+  }
 
   submitHandler = (value) => {
     this.setState({
       imgName: value,
       page: 1,
       imgArray: [],
+      uniqueIds: new Set(),
     });
   };
 
   handleButton = () => {
-    this.setState({ status: 'pending' }, () => {
-      this.fetchData();
-    });
+    this.setState(prev => ({ page: prev.page + 1 }));
   };
 
   toggleModal = () => {
@@ -123,5 +125,4 @@ class App extends Component {
     }
   }
 }
-
   export default App;
